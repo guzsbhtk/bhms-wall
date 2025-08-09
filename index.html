@@ -512,13 +512,13 @@ function handleWallInteractions() {
     // "עבר" כאשר החייל נמצא מימין לקיר בגובהו
     // תנאי מעבר: בעיטה בזמן + פתיחת חלון (או הרצף המלא)
     if (!wall.passed && (soldier.x > wall.x + wall.width) && (soldier.y + soldier.height <= wall.y + wall.height)) {
-        const didFullSequence = (soldier.kickedOnTouchWindow && soldier.openedWindowAfterKick) || (soldier.touchedWhileSprinting && soldier.kickedOnTouchWindow && soldier.openedWindowAfterKick);
+        // במובייל: תנאי מעבר פשוט יותר
+        const isMobile = window.innerWidth <= 900;
+        const didFullSequence = isMobile 
+            ? (soldier.kickedOnTouchWindow || soldier.openedWindowAfterKick) // במובייל: בעיטה או פתיחת חלון מספיקים
+            : (soldier.kickedOnTouchWindow && soldier.openedWindowAfterKick) || (soldier.touchedWhileSprinting && soldier.kickedOnTouchWindow && soldier.openedWindowAfterKick);
         if (didFullSequence) {
             wall.passed = true;
-        } else {
-            // כישלון: אל תתקע; אתחל ניסיון
-            queueFailReset();
-            return; // עצור עיבוד נוסף בפריים זה כדי למנוע התנהגות ביניים
         }
     }
 }
