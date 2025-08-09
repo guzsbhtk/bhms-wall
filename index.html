@@ -2,7 +2,7 @@
 <html lang="he">
 <head>
 <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>חייל בבחמ"ס</title>
 <style>
     body {
@@ -96,6 +96,58 @@
     /* ברירת מחדל להצגת בקרים במסכים צרים גם ללא JS אמין */
     @media (max-width: 900px) {
       #mobileControls { display: flex; }
+    }
+
+    /* מובייל: layout אנכי */
+    @media (max-width: 900px) and (orientation: portrait) {
+      body {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+      #info {
+        position: static;
+        order: 1;
+        flex-shrink: 0;
+        margin: 4px;
+        font-size: 12px;
+        max-height: 20vh;
+        overflow-y: auto;
+      }
+      #gameCanvas {
+        order: 2;
+        flex: 1;
+        width: 100%;
+        height: auto;
+        max-height: 60vh;
+        object-fit: contain;
+      }
+      #mobileControls {
+        order: 3;
+        position: static;
+        bottom: auto;
+        flex-shrink: 0;
+        margin: 4px;
+        padding: 8px;
+        justify-content: center;
+        gap: 16px;
+      }
+      .mobile-cluster {
+        grid-template-columns: repeat(3, 48px);
+        grid-auto-rows: 48px;
+        gap: 6px;
+      }
+      .mobile-btn {
+        font-size: 12px;
+        border-radius: 8px;
+      }
+      #mobileToggle {
+        position: static;
+        order: 0;
+        margin: 4px;
+        align-self: flex-end;
+      }
     }
 
     /* כפתור מתג ידני למובייל */
