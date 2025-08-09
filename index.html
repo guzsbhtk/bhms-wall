@@ -804,16 +804,18 @@ function wireMobileControls() {
     const open = mobileControlsEl.querySelector('.btn-open');
     const down = mobileControlsEl.querySelector('.btn-down');
 
-    const bind = (el, downCodes = [], upCodes = []) => {
+    const bind = (el, downCodes = [], action = null) => {
         const press = (e) => {
             e.preventDefault();
             el.classList.add('active');
             for (const c of downCodes) { keys[c] = true; }
+            // הפעלת פעולה ישירה במובייל
+            if (action) action();
         };
         const release = (e) => {
             e.preventDefault();
             el.classList.remove('active');
-            for (const c of [...downCodes, ...upCodes]) { keys[c] = false; }
+            for (const c of downCodes) { keys[c] = false; }
         };
         el.addEventListener('touchstart', press, { passive: false });
         el.addEventListener('touchend', release, { passive: false });
@@ -827,8 +829,36 @@ function wireMobileControls() {
     bind(right, ['ArrowRight']);
     bind(sprint, ['KeyS', 's', 'S']);
     bind(jump, ['Space', ' ']);
-    bind(kick, ['ArrowUp']);
-    bind(open, ['KeyC', 'c', 'C']);
+    
+    // בעיטה במובייל - פעולה ישירה
+    bind(kick, ['ArrowUp'], () => {
+        if (!soldier.onGround && !soldier.usedKick) {
+            if (isNearWallFront(soldier, wall, tuning.kickNearFrontDist)) {
+                soldier.dy = Math.min(soldier.dy, -12);
+                soldier.vx = Math.max(soldier.vx, 2.2);
+                soldier.usedKick = true;
+                soldier.kickAnimTimer = 12;
+                soldier.lastKickTime = performance.now();
+                if (soldier.lastWallTouchTime > 0 && performance.now() - soldier.lastWallTouchTime < tuning.kickWindowMs) {
+                    soldier.kickedOnTouchWindow = true;
+                    soldier.kickTextTimer = 24;
+                }
+            }
+        }
+    });
+    
+    // פתיחת חלון במובייל - פעולה ישירה
+    bind(open, ['KeyC', 'c', 'C'], () => {
+        if (soldier.state === "ledge_hold") {
+            soldier.state = "mantle";
+            soldier.mantleProgress = 0;
+            if (soldier.lastKickTime > 0 && performance.now() - soldier.lastKickTime < tuning.openAfterKickWindowMs) {
+                soldier.openedWindowAfterKick = true;
+                soldier.windowAnimTimer = 24;
+            }
+        }
+    });
+    
     bind(down, ['ArrowDown']);
 }
 </script>
