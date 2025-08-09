@@ -212,14 +212,14 @@ const mobileToggleBtn = document.getElementById("mobileToggle");
 
 // כיוונון זמנים ומרחקים (לגמישות)
 const tuning = {
-    kickWindowMs: 600,              // חלון זמן ל"בעיטה בזמן" לאחר מגע בקיר
-    openAfterKickWindowMs: 1800,    // חלון זמן לבצע "פתיחת חלון" לאחר בעיטה
-    touchNearFrontDist: 10,         // מרחק לזיהוי מגע סמוך לקיר
-    kickNearFrontDist: 28,          // מרחק נדרש כדי ש"בעיטה" תיחשב ליד הקיר
-    ledgeNearFrontDist: 20,         // מרחק לחזית הקיר כדי לאפשר תפיסת שפה
-    ledgeNearTopLeeway: 14,         // טולרנס גובה מעל שפת הקיר לתפיסה
-    timedJumpNearFrontDist: 40,     // מרחק לזיהוי "קפיצה בזמן" ליד הקיר
-    timedJumpSpeedLeeway: 1.0       // הקלה בדרישת מהירות לקפיצה בזמן
+    kickWindowMs: 1000,             // חלון זמן ל"בעיטה בזמן" לאחר מגע בקיר (הורחב)
+    openAfterKickWindowMs: 2500,    // חלון זמן לבצע "פתיחת חלון" לאחר בעיטה (הורחב)
+    touchNearFrontDist: 15,         // מרחק לזיהוי מגע סמוך לקיר (הורחב)
+    kickNearFrontDist: 35,          // מרחק נדרש כדי ש"בעיטה" תיחשב ליד הקיר (הורחב)
+    ledgeNearFrontDist: 25,         // מרחק לחזית הקיר כדי לאפשר תפיסת שפה (הורחב)
+    ledgeNearTopLeeway: 20,         // טולרנס גובה מעל שפת הקיר לתפיסה (הורחב)
+    timedJumpNearFrontDist: 50,     // מרחק לזיהוי "קפיצה בזמן" ליד הקיר (הורחב)
+    timedJumpSpeedLeeway: 1.5       // הקלה בדרישת מהירות לקפיצה בזמן (הורחב)
 };
 
 // חייל
