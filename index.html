@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+<meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>חייל בבחמ"ס</title>
+<style>
+    body {
+        margin: 0;
+        background: #cce7ff;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+    }
+    #gameCanvas {
+        display: block;
+        background: #88c070;
+        width: 100%;
+        height: auto;
+        max-width: 100vw;
+        touch-action: none;
+    }
+    #info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(255,255,255,0.8);
+        padding: 5px;
+        border-radius: 5px;
+        font-size: 14px;
+        direction: rtl;
+        text-align: right;
+    }
+    .controls-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 16px;
+        row-gap: 4px;
+        margin-top: 4px;
+        align-items: start;
+    }
+    .controls-grid > div { white-space: nowrap; }
+
+
+    /* בקרי מובייל */
+    .mobile-controls {
+        position: fixed;
+        inset-inline: 0;
+        bottom: 8px;
+        display: none;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding-inline: 8px;
+        z-index: 10;
+        pointer-events: none; /* נאפשר אינטראקציה רק בכפתורים */
+    }
+    .mobile-cluster {
+        display: grid;
+        grid-template-columns: repeat(3, 64px);
+        grid-auto-rows: 64px;
+        gap: 8px;
+        pointer-events: none;
+    }
+    .mobile-btn {
+        pointer-events: auto;
+        background: rgba(255,255,255,0.85);
+        border: 1px solid rgba(0,0,0,0.2);
+        border-radius: 12px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font: 600 14px system-ui, Arial, sans-serif;
+        color: #222;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+    }
+    .mobile-btn.active { background: rgba(173,216,230,0.95); }
+    .mobile-left {
+        grid-template-areas:
+          "left sprint right"
+          "left  .     right";
+    }
+    .mobile-right {
+        grid-template-areas:
+          "jump kick open"
+          "down  .   .   ";
+    }
+    .btn-left { grid-area: left; }
+    .btn-right{ grid-area: right; }
+    .btn-sprint{ grid-area: sprint; }
+    .btn-jump{ grid-area: jump; }
+    .btn-kick{ grid-area: kick; }
+    .btn-open{ grid-area: open; }
+    .btn-down{ grid-area: down; }
+
+    /* ברירת מחדל להצגת בקרים במסכים צרים גם ללא JS אמין */
+    @media (max-width: 900px) {
+      #mobileControls { display: flex; }
+    }
+
+    /* כפתור מתג ידני למובייל */
+    #mobileToggle {
+      position: fixed;
+      top: 8px;
+      inset-inline-end: 8px;
+      z-index: 20;
+      background: rgba(255,255,255,0.85);
+      border: 1px solid rgba(0,0,0,0.2);
+      border-radius: 10px;
+      padding: 6px 10px;
+      font: 600 12px system-ui, Arial, sans-serif;
+      color: #222;
+      user-select: none;
+    }
+</style>
+</head>
+<body>
+<div id="info">
+    <div><b>שליטה:</b></div>
+    <div class="controls-grid">
+        <div>חיצים ←→: ריצה</div>
+        <div>רווח: קפיצה</div>
+        <div>S: הסתערות (ספרינט)</div>
+        <div>חץ למעלה: בעיטה באוויר ליד הקיר</div>
+        <div>חץ למטה: ירידה מהשפה</div>
+        <div>C: "פתיחת חלון" על השפה</div>
+    </div>
+    <div id="status" style="margin-top:6px; font-size:12px;"></div>
+</div>
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+
+<!-- בקרי מובייל -->
+<button id="mobileToggle" type="button" aria-pressed="false" title="הצג/הסתר בקרים">בקרי מובייל: כבוי</button>
+<div id="mobileControls" class="mobile-controls">
+  <div class="mobile-cluster mobile-left">
+    <div class="mobile-btn btn-left">←</div>
+    <div class="mobile-btn btn-sprint">S</div>
+    <div class="mobile-btn btn-right">→</div>
+    <div class="mobile-btn btn-left" style="opacity:0; pointer-events:none;"></div>
+    <div class="mobile-btn" style="opacity:0; pointer-events:none;"></div>
+    <div class="mobile-btn btn-right" style="opacity:0; pointer-events:none;"></div>
+  </div>
+  <div class="mobile-cluster mobile-right">
+    <div class="mobile-btn btn-jump">␣</div>
+    <div class="mobile-btn btn-kick">↑</div>
+    <div class="mobile-btn btn-open">C</div>
+    <div class="mobile-btn btn-down">↓</div>
+  </div>
+  
+  
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const mobileControlsEl = document.getElementById("mobileControls");
+const mobileToggleBtn = document.getElementById("mobileToggle");
+
+// כיוונון זמנים ומרחקים (לגמישות)
+const tuning = {
+    kickWindowMs: 600,              // חלון זמן ל"בעיטה בזמן" לאחר מגע בקיר
+    openAfterKickWindowMs: 1800,    // חלון זמן לבצע "פתיחת חלון" לאחר בעיטה
+    touchNearFrontDist: 10,         // מרחק לזיהוי מגע סמוך לקיר
+    kickNearFrontDist: 28,          // מרחק נדרש כדי ש"בעיטה" תיחשב ליד הקיר
+    ledgeNearFrontDist: 20,         // מרחק לחזית הקיר כדי לאפשר תפיסת שפה
+    ledgeNearTopLeeway: 14,         // טולרנס גובה מעל שפת הקיר לתפיסה
+    timedJumpNearFrontDist: 40,     // מרחק לזיהוי "קפיצה בזמן" ליד הקיר
+    timedJumpSpeedLeeway: 1.0       // הקלה בדרישת מהירות לקפיצה בזמן
+};
+
+// חייל
+let soldier = {
+    x: 50,
+    y: 300,
+    width: 40,
+    height: 60,
+    color: "blue",
+    dy: 0,
+    vx: 0,
+    onGround: true,
+    facing: 1,
+    // פרמטרי תנועה
+    accel: 0.5,
+    sprintAccel: 0.8,
+    maxSpeed: 4.5,
+    sprintMaxSpeed: 7.5,
+    friction: 0.85,
+    // מצבים
+    state: "idle",
+    usedKick: false,
+    onWallTop: false,
+    mantleProgress: 0,
+    // אנימציה
+    animTime: 0,
+    kickAnimTimer: 0,
+    // רצף נדרש למעבר
+    lastWallTouchTime: -1,
+    touchedWhileSprinting: false,
+    kickedOnTouchWindow: false,
+    lastKickTime: -1,
+    openedWindowAfterKick: false,
+    // חיוויים
+    timedJumpTimer: 0,
+    jumpAnimTimer: 0,
+    kickTextTimer: 0,
+    windowAnimTimer: 0,
+    failResetTimer: 0
+};
+
+// קיר
+let wall = {
+    x: 500,
+    y: 250,
+    width: 50,
+    height: 150,
+    color: "brown",
+    passed: false
+};
+
+let keys = {};
+document.addEventListener("keydown", e => {
+    const code = e.code || e.key;
+    if (code === "ArrowRight" || code === "ArrowLeft" || code === "ArrowUp" || code === "KeyC" || code === "Space") {
+        e.preventDefault();
+    }
+    keys[code] = true;
+    keys[e.key] = true;
+
+    // ירידה מהשפה
+    if (code === "ArrowDown" && soldier.state === "ledge_hold") {
+        soldier.state = "air";
+        soldier.dy = 2;
+        soldier.vx = Math.min(soldier.vx, 0); // אין דחיפה קדימה
+        return;
+    }
+
+    // בעיטה באוויר ליד הקיר (חד-פעמית עד נחיתה)
+    if ((code === "ArrowUp") && !soldier.onGround && !soldier.usedKick) {
+        if (isNearWallFront(soldier, wall, tuning.kickNearFrontDist)) {
+            soldier.dy = Math.min(soldier.dy, -12);
+            soldier.vx = Math.max(soldier.vx, 2.2);
+            soldier.usedKick = true;
+            soldier.kickAnimTimer = 12;
+            soldier.lastKickTime = performance.now();
+            // סימון שהבעיטה בוצעה סמוך למגע בקיר (חלון זמן קצר לאחר מגע)
+            if (soldier.lastWallTouchTime > 0 && performance.now() - soldier.lastWallTouchTime < tuning.kickWindowMs) {
+                soldier.kickedOnTouchWindow = true;
+                soldier.kickTextTimer = 24; // חיווי טקסט קצר
+            }
+        }
+    }
+    // פתיחת חלון: התחלת טיפוס כאשר תלוי על השפה
+    if ((code === "KeyC") && soldier.state === "ledge_hold") {
+        soldier.state = "mantle";
+        soldier.mantleProgress = 0;
+        // פתיחת חלון לאחר בעיטה
+        if (soldier.lastKickTime > 0 && performance.now() - soldier.lastKickTime < tuning.openAfterKickWindowMs) {
+            soldier.openedWindowAfterKick = true;
+            soldier.windowAnimTimer = 24;
+        }
+    }
+});
+document.addEventListener("keyup", e => {
+    const code = e.code || e.key;
+    keys[code] = false;
+    keys[e.key] = false;
+});
+
+function update() {
+    // פרופיל ריצה: רגיל/הסתערות (D)
+    const sprint = !!(keys["KeyS"] || keys["s"] || keys["S"]);
+    const accel = sprint ? soldier.sprintAccel : soldier.accel;
+    const maxSpeed = sprint ? soldier.sprintMaxSpeed : soldier.maxSpeed;
+
+    // תאוצה אופקית (אם לא תופס שפה/מטפס)
+    if (soldier.state !== "ledge_hold" && soldier.state !== "mantle") {
+        if (keys["ArrowRight"]) {
+            soldier.vx += accel;
+            soldier.facing = 1;
+        } else if (keys["ArrowLeft"]) {
+            soldier.vx -= accel;
+            soldier.facing = -1;
+        } else if (soldier.onGround) {
+            soldier.vx *= soldier.friction;
+            if (Math.abs(soldier.vx) < 0.05) soldier.vx = 0;
+        }
+        soldier.vx = Math.max(-maxSpeed, Math.min(soldier.vx, maxSpeed));
+        soldier.x += soldier.vx;
+    }
+    // גבולות קנבס
+    soldier.x = Math.max(0, Math.min(soldier.x, canvas.width - soldier.width));
+
+    // קפיצה
+    if ((keys["Space"] || keys[" "] || keys["Spacebar"]) && soldier.onGround && soldier.state !== "ledge_hold" && soldier.state !== "mantle") {
+        // קפיצה בזמן: אם החייל קרוב לחזית הקיר ונמצא בריצה, נסמן חיווי מיוחד
+        const nearFrontForJump = isNearWallFront(soldier, wall, tuning.timedJumpNearFrontDist);
+        const runningFast = Math.abs(soldier.vx) > (soldier.maxSpeed - tuning.timedJumpSpeedLeeway);
+        // בוטל חיווי "קפיצה בזמן" (משאיר אפקט קפיצה בלבד)
+        soldier.dy = -12;
+        soldier.onGround = false;
+        soldier.onWallTop = false;
+        soldier.jumpAnimTimer = 12;
+    }
+
+    // גרביטציה ותנועת Y
+    if (soldier.state !== "ledge_hold" && soldier.state !== "mantle") {
+    soldier.dy += 0.5;
+    soldier.y += soldier.dy;
+    }
+    // רצפה תחתונה
+    if (soldier.y >= 300) {
+        soldier.y = 300;
+        soldier.dy = 0;
+        soldier.onGround = true;
+        soldier.usedKick = false;
+        // איפוס רצף במגע קרקע
+        soldier.touchedWhileSprinting = false;
+        soldier.kickedOnTouchWindow = false;
+        soldier.openedWindowAfterKick = false;
+        if (soldier.state !== "mantle" && soldier.state !== "ledge_hold") {
+            soldier.state = Math.abs(soldier.vx) > 0.1 ? "run" : "idle";
+        }
+    } else {
+        if (soldier.state !== "mantle" && soldier.state !== "ledge_hold") soldier.state = "air";
+        soldier.onGround = false;
+    }
+
+    // אינטראקציות עם הקיר
+    handleWallInteractions();
+
+    // טיימרי אנימציה
+    soldier.animTime += 1;
+    if (soldier.kickAnimTimer > 0) soldier.kickAnimTimer -= 1;
+    if (soldier.jumpAnimTimer > 0) soldier.jumpAnimTimer -= 1;
+    if (soldier.timedJumpTimer > 0) soldier.timedJumpTimer -= 1;
+    if (soldier.windowAnimTimer > 0) soldier.windowAnimTimer -= 1;
+    if (soldier.failResetTimer > 0) {
+        soldier.failResetTimer -= 1;
+        if (soldier.failResetTimer === 0) {
+            hardResetAttempt();
+        }
+    }
+}
+
+function queueFailReset() {
+    // הפעל חיווי קצר ואז אפס ניסיון
+    soldier.failResetTimer = 30; // חצי שנייה בערך
+}
+
+function hardResetAttempt() {
+    // החזרה לתחילת המסלול וניקוי מצבים
+    soldier.x = 50;
+    soldier.y = 300;
+    soldier.vx = 0;
+    soldier.dy = 0;
+    soldier.onGround = true;
+    soldier.state = "idle";
+    soldier.usedKick = false;
+    soldier.touchedWhileSprinting = false;
+    soldier.kickedOnTouchWindow = false;
+    soldier.openedWindowAfterKick = false;
+    soldier.lastWallTouchTime = -1;
+    soldier.lastKickTime = -1;
+    wall.passed = false;
+    // איפוס חיוויים
+    soldier.timedJumpTimer = 0;
+    soldier.jumpAnimTimer = 0;
+    soldier.kickTextTimer = 0;
+    soldier.windowAnimTimer = 0;
+}
+
+function isTouching(a, b) {
+    return a.x < b.x + b.width &&
+           a.x + a.width > b.x &&
+           a.y < b.y + b.height &&
+           a.y + a.height > b.y;
+}
+
+function isNearWallFront(a, b, dist = 10) {
+    // קרבה לחזית הקיר מצד שמאל
+    const frontX = b.x;
+    const dx = (a.x + a.width) - frontX;
+    const overlapY = (a.y + a.height) > b.y - 8 && a.y < (b.y + b.height);
+    return dx >= -dist && dx <= dist && overlapY;
+}
+
+function handleWallInteractions() {
+    // התנגשות בצד הקיר כאשר מגיעים משמאל
+    // נחשב מגע גם אם קרובים מאוד לקיר (לא רק חיתוך פיקסלי מלא)
+    const touchingFront = isTouching(soldier, wall) && soldier.x + soldier.width > wall.x && soldier.x < wall.x;
+    const nearFrontContact = isNearWallFront(soldier, wall, tuning.touchNearFrontDist);
+    if ((touchingFront || nearFrontContact) && soldier.state !== "ledge_hold" && soldier.state !== "mantle") {
+        const pushingIntoWall = soldier.vx > 0 || keys["ArrowRight"] === true;
+        if (pushingIntoWall && (soldier.x + soldier.width >= wall.x)) {
+            soldier.x = wall.x - soldier.width;
+            if (soldier.vx > 0) soldier.vx = 0; // עצירה מול הקיר
+            // מגע בקיר: נרשום זמן מגע ונבדוק אם בהסתערות
+            soldier.lastWallTouchTime = performance.now();
+            const sprintingNow = Math.abs(soldier.vx) >= (soldier.sprintMaxSpeed - 0.2);
+            soldier.touchedWhileSprinting = soldier.touchedWhileSprinting || sprintingNow;
+        }
+        // אם לא דוחפים לתוך הקיר (זזים שמאלה/עומדים), אל תצמיד בחזרה, אפשר לצאת
+    }
+
+    // עמידה על ראש הקיר
+    const feetY = soldier.y + soldier.height;
+    const onTopHoriz = (soldier.x + soldier.width) > wall.x && soldier.x < (wall.x + wall.width);
+    if (feetY >= wall.y && feetY <= wall.y + 10 && soldier.dy >= 0 && onTopHoriz) {
+        soldier.y = wall.y - soldier.height;
+        soldier.dy = 0;
+        soldier.onGround = true;
+        soldier.onWallTop = true;
+        if (soldier.state !== "mantle" && soldier.state !== "ledge_hold") {
+            soldier.state = Math.abs(soldier.vx) > 0.1 ? "run" : "idle";
+        }
+    }
+    if (!(onTopHoriz && Math.abs((soldier.y + soldier.height) - wall.y) < 2)) {
+        soldier.onWallTop = false;
+    }
+
+    // תקרת גובה ללא בעיטה: אם קפצתי ללא בעיטה, אפשר להגיע רק עד חצי גובה הקיר
+    const halfWallY = wall.y + wall.height / 2;
+    if (!soldier.usedKick && !soldier.onGround && soldier.y < halfWallY && soldier.x + soldier.width > wall.x - 4 && soldier.x < wall.x + wall.width + 4) {
+        // בלימת עליה מעבר לחצי ללא בעיטה
+        soldier.y = halfWallY;
+        soldier.dy = Math.min(soldier.dy, 0);
+    }
+
+    // תפיסת שפה: עצם התפיסה מותרת עם בעיטה בזמן (ללא צורך ב-W בשלב זה). ההצלחה הסופית תדרוש גם W לאחר הבעיטה.
+    const nearFront = isNearWallFront(soldier, wall, tuning.ledgeNearFrontDist);
+    const nearTop = soldier.y <= wall.y + tuning.ledgeNearTopLeeway;
+    const allowLedge = soldier.kickedOnTouchWindow; // בעיטה בזמן מספיקה כדי להיתפס
+    if (!wall.passed && !soldier.onGround && nearFront && nearTop && allowLedge) {
+        soldier.state = "ledge_hold";
+        soldier.vx = 0;
+        soldier.dy = 0;
+        soldier.y = wall.y + 6; // הגוף תלוי מעט מתחת לשפה
+        soldier.x = wall.x - soldier.width + 4;
+    }
+
+    // טיפוס (פתיחת חלון)
+    if (soldier.state === "mantle") {
+        soldier.mantleProgress += 0.06;
+        const t = Math.min(1, soldier.mantleProgress);
+        const targetX = wall.x + 6;
+        const targetY = wall.y - soldier.height;
+        soldier.x = soldier.x + (targetX - soldier.x) * t;
+        soldier.y = soldier.y + (targetY - soldier.y) * t;
+        if (t >= 1) {
+            soldier.state = "on_top";
+            soldier.onGround = true;
+            soldier.usedKick = false;
+            soldier.vx = 0;
+            soldier.dy = 0;
+        }
+    }
+
+    // "עבר" כאשר החייל נמצא מימין לקיר בגובהו
+    // תנאי מעבר: בעיטה בזמן + פתיחת חלון (או הרצף המלא)
+    if (!wall.passed && (soldier.x > wall.x + wall.width) && (soldier.y + soldier.height <= wall.y + wall.height)) {
+        const didFullSequence = (soldier.kickedOnTouchWindow && soldier.openedWindowAfterKick) || (soldier.touchedWhileSprinting && soldier.kickedOnTouchWindow && soldier.openedWindowAfterKick);
+        if (didFullSequence) {
+            wall.passed = true;
+        } else {
+            // כישלון: אל תתקע; אתחל ניסיון
+            queueFailReset();
+            return; // עצור עיבוד נוסף בפריים זה כדי למנוע התנהגות ביניים
+        }
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawBackground(ctx);
+    drawWall(ctx, wall);
+    drawSoldier(ctx, soldier);
+
+    if (wall.passed) {
+        ctx.fillStyle = "#333";
+        ctx.font = "14px Arial";
+        ctx.fillText("עברתם את הקיר!", wall.x - 20, wall.y - 10);
+    }
+
+
+    // HUD
+    if (statusEl) {
+        const speed = Math.abs(soldier.vx || 0).toFixed(2);
+        const seq = `רצף: ${soldier.touchedWhileSprinting ? "מגע בהסתערות" : ""}${soldier.kickedOnTouchWindow ? " + בעיטה בזמן" : ""}${soldier.openedWindowAfterKick ? " + פתיחת חלון" : ""}`;
+        statusEl.innerText = `מהירות: ${speed} | מצב: ${soldier.state}${soldier.onWallTop ? " (על הקיר)" : ""} | ${seq}`;
+    }
+}
+
+// רקע: בסיס בנגב (שמיים, שמש, דיונות, גדר, מגדל שמירה ואוהלים)
+function drawBackground(context) {
+    // שמיים גרדיאנט
+    const skyGrad = context.createLinearGradient(0, 0, 0, canvas.height);
+    skyGrad.addColorStop(0, "#cfefff");
+    skyGrad.addColorStop(1, "#a8d8ff");
+    context.fillStyle = skyGrad;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    // שמש
+    context.beginPath();
+    context.fillStyle = "#ffd27a";
+    context.arc(canvas.width - 80, 70, 28, 0, Math.PI * 2);
+    context.fill();
+
+    // דיונות
+    function dune(y, color) {
+        context.fillStyle = color;
+        context.beginPath();
+        context.moveTo(0, y);
+        for (let x = 0; x <= canvas.width; x += 40) {
+            const h = Math.sin((x + y) * 0.02) * 10 + Math.cos((x - y) * 0.015) * 6;
+            context.lineTo(x, y - h);
+        }
+        context.lineTo(canvas.width, canvas.height);
+        context.lineTo(0, canvas.height);
+        context.closePath();
+        context.fill();
+    }
+    dune(320, "#e7d6a3");
+    dune(350, "#d9c78d");
+    dune(380, "#cbb978");
+
+    // גדר בסיס
+    context.strokeStyle = "#6e6e6e";
+    context.lineWidth = 2;
+    const fenceY = 260;
+    context.beginPath();
+    context.moveTo(0, fenceY);
+    context.lineTo(canvas.width, fenceY);
+    context.stroke();
+    for (let x = 0; x < canvas.width; x += 20) {
+        context.beginPath();
+        context.moveTo(x, fenceY);
+        context.lineTo(x, fenceY - 18);
+        context.stroke();
+    }
+
+    // מגדל שמירה פשוט
+    const towerX = 90;
+    const towerBaseY = fenceY - 18;
+    context.fillStyle = "#8c7f6b";
+    context.fillRect(towerX, towerBaseY - 40, 10, 40);
+    context.fillRect(towerX + 30, towerBaseY - 40, 10, 40);
+    context.fillStyle = "#6e6354";
+    context.fillRect(towerX - 10, towerBaseY - 56, 60, 18);
+
+    // רק"מ רחוק (סילואטות) לאורך קו הגבעה האמצעית
+    const ridgeY = 350; // גובה הדאון האמצעי שצויר למעלה
+    const vehicleXs = [140, 320, 520, 700];
+    for (const vx of vehicleXs) {
+        const h = Math.sin((vx + ridgeY) * 0.02) * 10 + Math.cos((vx - ridgeY) * 0.015) * 6;
+        const groundY = ridgeY - h - 2;
+        drawArmoredVehicle(context, vx, groundY, 0.55, 0.35);
+    }
+}
+
+function drawArmoredVehicle(context, x, y, scale = 1, alpha = 0.4) {
+    context.save();
+    context.globalAlpha = alpha;
+    context.fillStyle = "#4a4a4a";
+    context.strokeStyle = "#404040";
+    context.translate(x, y);
+    context.scale(scale, scale);
+
+    // גוף
+    context.fillRect(0, -14, 70, 14);
+    // צריח
+    context.fillRect(30, -22, 24, 8);
+    // קנה
+    context.fillRect(54, -20, 26, 3);
+    // גלגלים
+    for (let i = 8; i <= 62; i += 14) {
+        context.beginPath();
+        context.arc(i, 0, 4, 0, Math.PI * 2);
+        context.fill();
+    }
+
+    context.restore();
+}
+
+// ציור קיר עם טקסטורה קלה
+function drawWall(context, w) {
+    context.fillStyle = w.color;
+    context.fillRect(w.x, w.y, w.width, w.height);
+    // קווי לבנים אופקיים
+    context.strokeStyle = "#5d3f25";
+    context.lineWidth = 1;
+    for (let y = w.y + 10; y < w.y + w.height; y += 10) {
+        context.beginPath();
+        context.moveTo(w.x, y);
+        context.lineTo(w.x + w.width, y);
+        context.stroke();
+    }
+    // סדקים קטנים
+    context.beginPath();
+    context.moveTo(w.x + 8, w.y + 40);
+    context.lineTo(w.x + 16, w.y + 44);
+    context.lineTo(w.x + 12, w.y + 50);
+    context.stroke();
+}
+
+// ציור חייל מצורות בסיסיות עם אנימציה
+function drawSoldier(context, s) {
+    const running = s.onGround && Math.abs(s.vx) > 0.2;
+    const bob = running ? Math.sin(s.animTime * 0.2) * 2 : 0;
+    const x = s.x;
+    const y = s.y + bob;
+    const w = s.width;
+    const h = s.height;
+
+    // צל קטן
+    context.fillStyle = "rgba(0,0,0,0.15)";
+    context.beginPath();
+    context.ellipse(x + w / 2, y + h, w * 0.6, 6, 0, 0, Math.PI * 2);
+    context.fill();
+
+    // גוף
+    context.fillStyle = "#3b5a3b"; // ירוק זית
+    context.fillRect(x + 6, y + 18, w - 12, h - 26);
+
+    // ראש
+    const headR = 10;
+    context.fillStyle = "#f0d1b5";
+    context.beginPath();
+    context.arc(x + w / 2, y + 14, headR, 0, Math.PI * 2);
+    context.fill();
+    // קסדה
+    context.fillStyle = "#2f4a2f";
+    context.beginPath();
+    context.arc(x + w / 2, y + 12, headR + 4, Math.PI, 0);
+    context.fill();
+
+    // ידיים
+    context.fillStyle = "#3b5a3b";
+    const armY = y + 32;
+    const armLen = 12;
+    const armH = 5;
+    // יד קדמית (ימין)
+    context.fillRect(x + w - 10, armY, armLen, armH);
+    // יד אחורית (שמאל)
+    context.fillRect(x - 2, armY + 2, armLen, armH);
+
+    // רגליים עם נדנוד
+    const phase = ((s.animTime % 20) / 20) * Math.PI * 2;
+    const swing = running ? Math.sin(phase) * 6 : 0;
+    context.fillStyle = "#2f4a2f";
+    // רגל שמאל
+    context.fillRect(x + 8, y + h - 14, 8, 14 + swing * 0.1);
+    // רגל ימין
+    context.fillRect(x + w - 16, y + h - 14, 8, 14 - swing * 0.1);
+
+    // בעיטה קדימה
+    if (s.kickAnimTimer > 0) {
+        context.fillStyle = "#243a24";
+        context.fillRect(x + w - 2, y + h - 22, 12, 5);
+    }
+
+    // תפיסת שפה: ידיים למעלה
+    if (s.state === "ledge_hold" || s.state === "mantle") {
+        context.fillStyle = "#3b5a3b";
+        context.fillRect(x + w - 6, y - 6, 5, 10);
+        context.fillRect(x + w - 14, y - 6, 5, 10);
+    }
+
+    // אפקט קפיצה קצר
+    if (s.jumpAnimTimer > 0) {
+        context.fillStyle = "rgba(255,255,255,0.5)";
+        context.beginPath();
+        context.ellipse(x + w / 2, y + h, 14, 6, 0, 0, Math.PI * 2);
+        context.fill();
+    }
+
+    // חיווי פתיחת חלון
+    if (s.windowAnimTimer > 0) {
+        drawFloatingText(context, "פתיחת חלון", x + w / 2 + 6, y - 34, "#8e24aa");
+    }
+}
+
+// טקסט צף עם צל קל
+function drawFloatingText(context, text, x, y, color = "#000") {
+    context.save();
+    context.font = "bold 12px Arial";
+    context.textAlign = "center";
+    context.fillStyle = "rgba(0,0,0,0.35)";
+    context.fillText(text, x + 1, y + 1);
+    context.fillStyle = color;
+    context.fillText(text, x, y);
+    context.restore();
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+
+// זיהוי מובייל והפעלת בקרי מגע (מזוהה גם לפי מאפייני מצביע/מסך)
+function isMobileContext() {
+    try {
+        if (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) return true;
+        if ("ontouchstart" in window) return true;
+        if (window.matchMedia && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches)) return true;
+        const ua = (navigator.userAgent || navigator.vendor || "").toLowerCase();
+        if (/android|iphone|ipad|ipod|mobile/.test(ua)) return true;
+    } catch (_) {}
+    return false;
+}
+
+let mobileControlsWired = false;
+function applyMobileControlsVisibility(force) {
+    const urlForce = new URLSearchParams(location.search).get('mobile');
+    const stored = localStorage.getItem('bhms_show_mobile');
+    const storedPref = stored === null ? null : stored === 'true';
+    const autoDetected = isMobileContext() || window.innerWidth <= 900; // נפעיל גם במסכים צרים
+    // אם זוהה מובייל/מסך צר – נכפה הצגה, אלא אם יש force ספציפי
+    // העדפות: force (פרמ') > כפתור/אחסון (true בלבד) > זיהוי אוטומטי
+    const shouldShow = (typeof force === 'boolean') ? force
+        : (urlForce === '1' ? true
+        : (autoDetected || storedPref === true));
+    mobileControlsEl.style.display = shouldShow ? 'flex' : 'none';
+    mobileToggleBtn.setAttribute('aria-pressed', String(shouldShow));
+    mobileToggleBtn.textContent = `בקרי מובייל: ${shouldShow ? 'פועל' : 'כבוי'}`;
+    if (shouldShow && !mobileControlsWired) {
+        wireMobileControls();
+        mobileControlsWired = true;
+    }
+}
+applyMobileControlsVisibility();
+window.addEventListener('resize', () => applyMobileControlsVisibility());
+window.addEventListener('orientationchange', () => applyMobileControlsVisibility());
+mobileToggleBtn.addEventListener('click', () => {
+    const nowShown = mobileControlsEl.style.display !== 'none';
+    const next = !nowShown;
+    localStorage.setItem('bhms_show_mobile', String(next));
+    applyMobileControlsVisibility(next);
+});
+
+function wireMobileControls() {
+    const left = mobileControlsEl.querySelector('.btn-left');
+    const right = mobileControlsEl.querySelector('.btn-right');
+    const sprint = mobileControlsEl.querySelector('.btn-sprint');
+    const jump = mobileControlsEl.querySelector('.btn-jump');
+    const kick = mobileControlsEl.querySelector('.btn-kick');
+    const open = mobileControlsEl.querySelector('.btn-open');
+    const down = mobileControlsEl.querySelector('.btn-down');
+
+    const bind = (el, downCodes = [], upCodes = []) => {
+        const press = (e) => {
+            e.preventDefault();
+            el.classList.add('active');
+            for (const c of downCodes) { keys[c] = true; }
+        };
+        const release = (e) => {
+            e.preventDefault();
+            el.classList.remove('active');
+            for (const c of [...downCodes, ...upCodes]) { keys[c] = false; }
+        };
+        el.addEventListener('touchstart', press, { passive: false });
+        el.addEventListener('touchend', release, { passive: false });
+        el.addEventListener('touchcancel', release, { passive: false });
+        el.addEventListener('mousedown', press);
+        el.addEventListener('mouseup', release);
+        el.addEventListener('mouseleave', release);
+    };
+
+    bind(left, ['ArrowLeft']);
+    bind(right, ['ArrowRight']);
+    bind(sprint, ['KeyS', 's', 'S']);
+    bind(jump, ['Space', ' ']);
+    bind(kick, ['ArrowUp']);
+    bind(open, ['KeyC', 'c', 'C']);
+    bind(down, ['ArrowDown']);
+}
+</script>
+</body>
+</html>
