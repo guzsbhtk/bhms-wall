@@ -174,7 +174,7 @@
         <div>חיצים ←→: ריצה</div>
         <div>רווח: קפיצה</div>
         <div>S: הסתערות (ספרינט)</div>
-        <div>חץ למעלה: בעיטה באוויר ליד הקיר</div>
+        <div>חץ למעלה: בעיטה בקיר</div>
         <div>חץ למטה: ירידה מהשפה</div>
         <div>C: "פתיחת חלון" על השפה</div>
     </div>
@@ -183,7 +183,6 @@
 <canvas id="gameCanvas" width="800" height="400"></canvas>
 
 <!-- בקרי מובייל -->
-<button id="mobileToggle" type="button" aria-pressed="false" title="הצג/הסתר בקרים">בקרי מובייל: כבוי</button>
 <div id="mobileControls" class="mobile-controls">
   <div class="mobile-cluster mobile-left">
     <div class="mobile-btn btn-left">←</div>
@@ -208,7 +207,6 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const mobileControlsEl = document.getElementById("mobileControls");
-const mobileToggleBtn = document.getElementById("mobileToggle");
 
 // כיוונון זמנים ומרחקים (לגמישות)
 const tuning = {
@@ -778,8 +776,6 @@ function applyMobileControlsVisibility(force) {
         : (urlForce === '1' ? true
         : (autoDetected || storedPref === true));
     mobileControlsEl.style.display = shouldShow ? 'flex' : 'none';
-    mobileToggleBtn.setAttribute('aria-pressed', String(shouldShow));
-    mobileToggleBtn.textContent = `בקרי מובייל: ${shouldShow ? 'פועל' : 'כבוי'}`;
     if (shouldShow && !mobileControlsWired) {
         wireMobileControls();
         mobileControlsWired = true;
@@ -788,12 +784,6 @@ function applyMobileControlsVisibility(force) {
 applyMobileControlsVisibility();
 window.addEventListener('resize', () => applyMobileControlsVisibility());
 window.addEventListener('orientationchange', () => applyMobileControlsVisibility());
-mobileToggleBtn.addEventListener('click', () => {
-    const nowShown = mobileControlsEl.style.display !== 'none';
-    const next = !nowShown;
-    localStorage.setItem('bhms_show_mobile', String(next));
-    applyMobileControlsVisibility(next);
-});
 
 function wireMobileControls() {
     const left = mobileControlsEl.querySelector('.btn-left');
